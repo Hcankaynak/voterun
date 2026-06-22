@@ -1,0 +1,13 @@
+# Backend
+backend/voterun.db
+backend/voterun.db-*
+backend/voterun
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Env / editor
+.env
+.env.local
+.DS_Store
