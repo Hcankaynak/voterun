@@ -1,0 +1,26 @@
+# Production compose for your server: pulls prebuilt images from the registry
+# (no source code or build step required on the server).
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+services:
+  backend:
+    image: ghcr.io/hcankaynak/voterun-backend:latest
+    environment:
+      CORS_ORIGIN: "http://localhost:3000"
+      DB_PATH: /data/voterun.db
+    volumes:
+      - voterun-data:/data
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/hcankaynak/voterun-frontend:latest
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  voterun-data:

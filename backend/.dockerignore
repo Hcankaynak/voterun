@@ -1,0 +1,7 @@
+voterun.db
+voterun.db-*
+voterun
+*.log
+.git
+Dockerfile
+.dockerignore

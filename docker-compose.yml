@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    image: ghcr.io/hcankaynak/voterun-backend:latest
+    environment:
+      # The frontend reaches the API through the nginx proxy (same origin),
+      # so CORS is permissive here for direct API testing on the host.
+      CORS_ORIGIN: "http://localhost:3000,http://localhost:5173"
+      DB_PATH: /data/voterun.db
+    volumes:
+      # Named volume keeps the SQLite database across redeploys/restarts.
+      - voterun-data:/data
+    ports:
+      # Exposed for direct API testing; the frontend talks to it internally.
+      - "8081:8080"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: ghcr.io/hcankaynak/voterun-frontend:latest
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  voterun-data:

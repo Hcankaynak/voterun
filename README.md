@@ -74,6 +74,23 @@ The backend can be configured via environment variables:
 | `DB_PATH`     | Path to the SQLite database file      | `voterun.db`  |
 | `CORS_ORIGIN` | Allowed origin for the frontend       | `http://localhost:5173` |
 
+## Run with Docker
+
+The repo ships with Dockerfiles for both apps and a Compose file for spinning up the full stack:
+
+```bash
+docker compose up --build
+```
+
+- Frontend (nginx serving the SPA + proxying the API/WebSocket): `http://localhost:3000`
+- Backend API (exposed for direct testing): `http://localhost:8081`
+
+The SQLite database is stored in a named Docker volume (`voterun-data`), so your retros **persist across restarts and redeploys**. To wipe all data, remove the volume:
+
+```bash
+docker compose down -v
+```
+
 ## Build for Production
 
 ```bash
