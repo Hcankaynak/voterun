@@ -1,79 +1,58 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { api, getToken, setToken } from "./api.js";
 
-// Lightweight client-side auth so the app matches voterun.app's login flow
-// without requiring a real auth backend. Credentials live in localStorage.
-// A demo account is seeded so you can sign in immediately.
-
-const SESSION_KEY = "voterun:session";
-const USERS_KEY = "voterun:users";
-
-const DEMO_USER = { email: "burcu@burcu.com", password: "123456", name: "Burcu" };
-
-function loadUsers() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-    if (!stored.some((u) => u.email === DEMO_USER.email)) {
-      stored.push(DEMO_USER);
-    }
-    return stored;
-  } catch {
-    return [DEMO_USER];
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
+// Backend-backed authentication. The JWT returned by the API is stored in
+// localStorage and attached to every request by the api wrapper. On startup
+// we validate any existing token by fetching the current user.
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(SESSION_KEY));
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Restore the session from a stored token on first load.
   useEffect(() => {
-    if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    else localStorage.removeItem(SESSION_KEY);
-  }, [user]);
-
-  const login = (email, password) => {
-    const found = loadUsers().find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase()
-    );
-    if (!found || found.password !== password) {
-      throw new Error("Invalid email or password.");
+    let cancelled = false;
+    async function restore() {
+      if (!getToken()) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const me = await api.me();
+        if (!cancelled) setUser(me);
+      } catch {
+        setToken(null); // token invalid/expired
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    setUser({ email: found.email, name: found.name || found.email.split("@")[0] });
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = async (email, password) => {
+    const { token, user } = await api.login(email.trim(), password);
+    setToken(token);
+    setUser(user);
   };
 
-  const register = (email, password) => {
-    const users = loadUsers();
-    const normalized = email.trim().toLowerCase();
-    if (users.some((u) => u.email.toLowerCase() === normalized)) {
-      throw new Error("An account with that email already exists.");
-    }
-    const newUser = { email: email.trim(), password, name: email.split("@")[0] };
-    users.push(newUser);
-    saveUsers(users);
-    setUser({ email: newUser.email, name: newUser.name });
+  const register = async (email, password, name) => {
+    const { token, user } = await api.register(email.trim(), password, name);
+    setToken(token);
+    setUser(user);
   };
 
-  const loginWithGoogle = () => {
-    // Demo-only Google sign-in placeholder.
-    setUser({ email: "guest@google.com", name: "Google User" });
+  const logout = () => {
+    setToken(null);
+    setUser(null);
   };
-
-  const logout = () => setUser(null);
 
   return (
-    <AuthContext.Provider
-      value={{ user, login, register, loginWithGoogle, logout }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,12 +2,17 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
+
+// ErrEmailTaken is returned when registering an email that already exists.
+var ErrEmailTaken = errors.New("email already registered")
 
 // Store wraps the SQLite database and exposes retro-board operations.
 type Store struct {
@@ -35,9 +40,18 @@ func NewStore(path string) (*Store, error) {
 
 func (s *Store) migrate() error {
 	const schema = `
+CREATE TABLE IF NOT EXISTS users (
+	id            TEXT PRIMARY KEY,
+	email         TEXT NOT NULL UNIQUE,
+	password_hash TEXT NOT NULL,
+	name          TEXT NOT NULL,
+	created_at    TIMESTAMP NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS boards (
 	id         TEXT PRIMARY KEY,
 	name       TEXT NOT NULL,
+	owner_id   TEXT,
 	created_at TIMESTAMP NOT NULL
 );
 
@@ -66,23 +80,69 @@ CREATE INDEX IF NOT EXISTS idx_columns_board ON columns(board_id);
 CREATE INDEX IF NOT EXISTS idx_cards_column ON cards(column_id);
 CREATE INDEX IF NOT EXISTS idx_votes_card ON votes(card_id);
 `
-	_, err := s.db.Exec(schema)
-	if err != nil {
+	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+
+	// Backfill columns for databases created before these fields existed.
+	// This must happen before any index that references the new column.
+	if err := s.addColumnIfMissing("boards", "owner_id", "TEXT"); err != nil {
+		return fmt.Errorf("migrate boards.owner_id: %w", err)
+	}
+
+	if _, err := s.db.Exec(
+		"CREATE INDEX IF NOT EXISTS idx_boards_owner ON boards(owner_id)",
+	); err != nil {
+		return fmt.Errorf("migrate idx_boards_owner: %w", err)
 	}
 	return nil
 }
 
+// addColumnIfMissing adds a column to a table only if it isn't already present,
+// making schema changes safe to run against existing databases.
+func (s *Store) addColumnIfMissing(table, column, definition string) error {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			ctype      string
+			notNull    int
+			dfltValue  sql.NullString
+			primaryKey int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &primaryKey); err != nil {
+			return err
+		}
+		if name == column {
+			return nil // already exists
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
+	return err
+}
+
 var defaultColumns = []string{"What went well", "What didn't go well", "Action items"}
 
-// CreateBoard inserts a new board seeded with the default retro columns.
-func (s *Store) CreateBoard(name string) (*Board, error) {
+// CreateBoard inserts a new board (owned by ownerID) seeded with the default
+// retro columns.
+func (s *Store) CreateBoard(name, ownerID string) (*Board, error) {
 	if name == "" {
 		name = "Untitled Retro"
 	}
 	board := &Board{
 		ID:        uuid.NewString(),
 		Name:      name,
+		OwnerID:   ownerID,
 		CreatedAt: time.Now().UTC(),
 	}
 
@@ -93,8 +153,8 @@ func (s *Store) CreateBoard(name string) (*Board, error) {
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(
-		"INSERT INTO boards (id, name, created_at) VALUES (?, ?, ?)",
-		board.ID, board.Name, board.CreatedAt,
+		"INSERT INTO boards (id, name, owner_id, created_at) VALUES (?, ?, ?, ?)",
+		board.ID, board.Name, board.OwnerID, board.CreatedAt,
 	); err != nil {
 		return nil, err
 	}
@@ -117,15 +177,17 @@ func (s *Store) CreateBoard(name string) (*Board, error) {
 // GetBoard loads a board with its columns, cards, and vote tallies.
 func (s *Store) GetBoard(id string) (*Board, error) {
 	board := &Board{}
+	var ownerID sql.NullString
 	err := s.db.QueryRow(
-		"SELECT id, name, created_at FROM boards WHERE id = ?", id,
-	).Scan(&board.ID, &board.Name, &board.CreatedAt)
+		"SELECT id, name, owner_id, created_at FROM boards WHERE id = ?", id,
+	).Scan(&board.ID, &board.Name, &ownerID, &board.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	board.OwnerID = ownerID.String
 
 	colRows, err := s.db.Query(
 		"SELECT id, board_id, title, position FROM columns WHERE board_id = ? ORDER BY position",
@@ -290,6 +352,85 @@ func (s *Store) ToggleVote(cardID, voterID string) (string, error) {
 		_, err = s.db.Exec("INSERT INTO votes (card_id, voter_id) VALUES (?, ?)", cardID, voterID)
 	}
 	return boardID, err
+}
+
+// ListBoardsByOwner returns the boards owned by a user, newest first.
+// The returned boards are summaries (no columns/cards loaded).
+func (s *Store) ListBoardsByOwner(ownerID string) ([]Board, error) {
+	rows, err := s.db.Query(
+		"SELECT id, name, owner_id, created_at FROM boards WHERE owner_id = ? ORDER BY created_at DESC",
+		ownerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	boards := []Board{}
+	for rows.Next() {
+		var b Board
+		var owner sql.NullString
+		if err := rows.Scan(&b.ID, &b.Name, &owner, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		b.OwnerID = owner.String
+		boards = append(boards, b)
+	}
+	return boards, rows.Err()
+}
+
+// CreateUser inserts a new user. It returns ErrEmailTaken if the email is
+// already registered.
+func (s *Store) CreateUser(email, passwordHash, name string) (*User, error) {
+	user := &User{
+		ID:        uuid.NewString(),
+		Email:     email,
+		Name:      name,
+		CreatedAt: time.Now().UTC(),
+	}
+	_, err := s.db.Exec(
+		"INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)",
+		user.ID, user.Email, passwordHash, user.Name, user.CreatedAt,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil, ErrEmailTaken
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+// GetUserByEmail returns the user and their stored password hash for login.
+// Returns (nil, "", nil) when no user matches.
+func (s *Store) GetUserByEmail(email string) (*User, string, error) {
+	user := &User{}
+	var hash string
+	err := s.db.QueryRow(
+		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = ?", email,
+	).Scan(&user.ID, &user.Email, &user.Name, &hash, &user.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	return user, hash, nil
+}
+
+// GetUserByID returns the user with the given id, or (nil, nil) if not found.
+func (s *Store) GetUserByID(id string) (*User, error) {
+	user := &User{}
+	err := s.db.QueryRow(
+		"SELECT id, email, name, created_at FROM users WHERE id = ?", id,
+	).Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // Close releases the underlying database handle.

@@ -2,10 +2,19 @@ package main
 
 import "time"
 
+// User is a registered account that can own boards.
+type User struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // Board is a single retrospective board that participants collaborate on.
 type Board struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	OwnerID   string    `json:"ownerId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	Columns   []Column  `json:"columns"`
 }

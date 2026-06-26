@@ -7,6 +7,8 @@ services:
       # so CORS is permissive here for direct API testing on the host.
       CORS_ORIGIN: "http://localhost:3000,http://localhost:5173"
       DB_PATH: /data/voterun.db
+      # Local dev secret for signing JWTs. Use a real secret in production.
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
     volumes:
       # Named volume keeps the SQLite database across redeploys/restarts.
       - voterun-data:/data
