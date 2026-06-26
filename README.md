@@ -91,6 +91,13 @@ The SQLite database is stored in a named Docker volume (`voterun-data`), so your
 docker compose down -v
 ```
 
+## Deploying to a server
+
+For production deployment behind custom domains (`new.voterun.app` → frontend,
+`api.voterun.app` → backend) with a host nginx reverse proxy and HTTPS, see
+[`deploy/README.md`](./deploy/README.md). Images are published to GHCR by the
+GitHub Actions workflow in [`.github/workflows`](./.github/workflows).
+
 ## Build for Production
 
 ```bash

@@ -1,0 +1,35 @@
+# Server deployment stack — run this on the server to pull and start VoteRun.
+# Pulls prebuilt images from GHCR (no source code or build step on the server).
+#
+#   cd deploy
+#   cp .env.example .env        # then edit the values
+#   docker compose pull
+#   docker compose up -d
+#
+# Public traffic is fronted by the host nginx reverse proxy (see deploy/nginx/).
+# Container ports are bound to 127.0.0.1 only, so nothing is exposed publicly
+# except through that proxy.
+services:
+  backend:
+    image: ghcr.io/hcankaynak/voterun-backend:${IMAGE_TAG:-latest}
+    environment:
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://new.voterun.app}
+      DB_PATH: /data/voterun.db
+    volumes:
+      - voterun-data:/data
+    ports:
+      # api.voterun.app -> this port (localhost-only; fronted by host nginx)
+      - "127.0.0.1:8081:8080"
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/hcankaynak/voterun-frontend:${IMAGE_TAG:-latest}
+    depends_on:
+      - backend
+    ports:
+      # new.voterun.app -> this port (localhost-only; fronted by host nginx)
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
+
+volumes:
+  voterun-data:
