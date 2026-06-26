@@ -10,16 +10,18 @@ import (
 
 // Server wires the store and the realtime hub into HTTP handlers.
 type Server struct {
-	store    *Store
-	hub      *Hub
-	upgrader websocket.Upgrader
+	store     *Store
+	hub       *Hub
+	jwtSecret []byte
+	upgrader  websocket.Upgrader
 }
 
 // NewServer builds a Server with sensible WebSocket defaults.
-func NewServer(store *Store, hub *Hub) *Server {
+func NewServer(store *Store, hub *Hub, jwtSecret []byte) *Server {
 	return &Server{
-		store: store,
-		hub:   hub,
+		store:     store,
+		hub:       hub,
+		jwtSecret: jwtSecret,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -38,7 +40,16 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 
 	api := r.Group("/api")
 	{
-		api.POST("/boards", s.createBoard)
+		// Authentication.
+		api.POST("/auth/register", s.register)
+		api.POST("/auth/login", s.login)
+		api.GET("/auth/me", s.requireAuth, s.me)
+
+		// Boards owned by the authenticated user.
+		api.GET("/boards", s.requireAuth, s.listMyBoards)
+		api.POST("/boards", s.requireAuth, s.createBoard)
+
+		// Open endpoints: invited participants join a board via its link.
 		api.GET("/boards/:id", s.getBoard)
 		api.POST("/boards/:id/cards", s.createCard)
 		api.PATCH("/cards/:id", s.updateCard)
@@ -49,13 +60,22 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 	r.GET("/ws/boards/:id", s.handleWS)
 }
 
+func (s *Server) listMyBoards(c *gin.Context) {
+	boards, err := s.store.ListBoardsByOwner(c.GetString("userID"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, boards)
+}
+
 func (s *Server) createBoard(c *gin.Context) {
 	var body struct {
 		Name string `json:"name"`
 	}
 	_ = c.ShouldBindJSON(&body)
 
-	board, err := s.store.CreateBoard(body.Name)
+	board, err := s.store.CreateBoard(body.Name, c.GetString("userID"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
