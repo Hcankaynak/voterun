@@ -33,5 +33,42 @@ services:
       - "127.0.0.1:3000:80"
     restart: unless-stopped
 
+  # --- Monitoring ----------------------------------------------------------
+  # Prometheus scrapes the backend's /metrics over the internal Compose network
+  # (backend:8080), so metrics are never exposed publicly. Grafana visualizes
+  # them and is fronted by host nginx at grafana.voterun.app.
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      # Localhost-only; optional, for debugging via an SSH tunnel.
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deploy/.env}
+      GF_SERVER_ROOT_URL: https://grafana.voterun.app
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      # grafana.voterun.app -> this port (localhost-only; fronted by host nginx)
+      - "127.0.0.1:3001:3000"
+    restart: unless-stopped
+
 volumes:
   voterun-data:
+  prometheus-data:
+  grafana-data:
