@@ -17,6 +17,7 @@ const BASE_URL = (__ENV.BASE_URL || "https://api.voterun.app").replace(/\/+$/, "
 const WS_URL = (__ENV.WS_URL || BASE_URL.replace(/^http/, "ws")).replace(/\/+$/, "");
 const VUS = Number(__ENV.VUS || 150);
 const SMOKE = __ENV.SMOKE === "1" || __ENV.SMOKE === "true";
+const SMOKE_VUS = Number(__ENV.SMOKE_VUS || 5);
 
 const CARDS_PER_USER = Number(__ENV.CARDS_PER_USER || 3);
 const VOTE_RATIO = Number(__ENV.VOTE_RATIO || 0.55);
@@ -84,8 +85,8 @@ export const options = {
           executor: "ramping-vus",
           startVUs: 0,
           stages: [
-            { duration: "15s", target: 5 },
-            { duration: "45s", target: 5 },
+            { duration: "15s", target: SMOKE_VUS },
+            { duration: "45s", target: SMOKE_VUS },
             { duration: "10s", target: 0 },
           ],
           gracefulStop: "10s",
