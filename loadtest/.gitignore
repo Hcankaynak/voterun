@@ -1,0 +1,4 @@
+# k6 result artifacts
+*-summary.json
+*.csv
+results/
