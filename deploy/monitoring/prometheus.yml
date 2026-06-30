@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # VoteRun Gin backend. Reached over the internal Compose network, so the
+  # endpoint is never exposed publicly.
+  - job_name: voterun-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8080"]
+
+  # Prometheus scraping itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -38,6 +38,7 @@ func (h *Hub) add(c *client) {
 		h.rooms[c.boardID] = make(map[*client]struct{})
 	}
 	h.rooms[c.boardID][c] = struct{}{}
+	wsActiveConns.Inc()
 }
 
 func (h *Hub) remove(c *client) {
@@ -47,6 +48,7 @@ func (h *Hub) remove(c *client) {
 		if _, ok := room[c]; ok {
 			delete(room, c)
 			close(c.send)
+			wsActiveConns.Dec()
 		}
 		if len(room) == 0 {
 			delete(h.rooms, c.boardID)
@@ -63,6 +65,7 @@ func (h *Hub) Broadcast(board *Board) {
 	if err != nil {
 		return
 	}
+	wsBroadcasts.Inc()
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()

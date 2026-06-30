@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func env(key, fallback string) string {
@@ -42,6 +43,11 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
 	}))
+	r.Use(metricsMiddleware())
+
+	// Prometheus scrape endpoint. Kept internal: Prometheus reaches it over the
+	// Compose network, and the host nginx blocks it on api.voterun.app.
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	server.RegisterRoutes(r)
 
