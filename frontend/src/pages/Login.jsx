@@ -8,7 +8,9 @@ export default function Login() {
   const location = useLocation();
   const from = location.state?.from?.pathname || "/";
 
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [mode, setMode] = useState(
+    location.state?.mode === "register" ? "register" : "login"
+  ); // "login" | "register"
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -1,13 +1,15 @@
-import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "./lib/auth.jsx";
-import RequireAuth from "./components/RequireAuth.jsx";
 import Login from "./pages/Login.jsx";
 import Home from "./pages/Home.jsx";
+import Landing from "./pages/Landing.jsx";
 import BoardPage from "./pages/BoardPage.jsx";
 
 function Header() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const onLanding = location.pathname === "/";
 
   const handleLogout = () => {
     logout();
@@ -21,7 +23,7 @@ function Header() {
       </Link>
       <span className="tagline">Real-time retrospectives</span>
       <div className="header-spacer" />
-      {user && (
+      {user ? (
         <div className="header-user">
           <span className="avatar">{(user.name || user.email)[0]}</span>
           <span>{user.email}</span>
@@ -29,9 +31,33 @@ function Header() {
             Logout
           </button>
         </div>
+      ) : (
+        onLanding && (
+          <div className="header-auth">
+            <Link to="/login" className="btn btn-light">
+              Sign in
+            </Link>
+            <Link to="/login" state={{ mode: "register" }} className="btn btn-primary">
+              Get started
+            </Link>
+          </div>
+        )
       )}
     </header>
   );
+}
+
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="board-loading">
+        <div className="spinner" />
+        <p>Loading…</p>
+      </div>
+    );
+  }
+  return user ? <Home /> : <Landing />;
 }
 
 export default function App() {
@@ -41,22 +67,8 @@ export default function App() {
       <main className="app-main">
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <Home />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/board/:id"
-            element={
-              <RequireAuth>
-                <BoardPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="/" element={<RootRoute />} />
+          <Route path="/board/:id" element={<BoardPage />} />
         </Routes>
       </main>
     </div>
