@@ -33,7 +33,10 @@ SMOKE=1 k6 run -e BASE_URL=http://localhost:8081 -e WS_URL=ws://localhost:8081 l
 # 2. Prod smoke test (5 VUs)
 SMOKE=1 k6 run loadtest/script.js
 
-# 3. Full prod run (150 VUs, default target https://api.voterun.app)
+# 3. Prod smoke test with 30 VUs
+SMOKE=1 SMOKE_VUS=30 k6 run loadtest/script.js
+
+# 4. Full prod run (150 VUs, default target https://api.voterun.app)
 k6 run loadtest/script.js
 ```
 
@@ -44,7 +47,8 @@ k6 run loadtest/script.js
 | `BASE_URL` | `https://api.voterun.app` | REST base URL |
 | `WS_URL` | derived from `BASE_URL` (`http`->`ws`) | WebSocket base URL |
 | `VUS` | `150` | Concurrent virtual users (full run) |
-| `SMOKE` | unset | `1` -> small 5-VU profile |
+| `SMOKE` | unset | `1` -> small smoke profile |
+| `SMOKE_VUS` | `5` | Concurrent virtual users in smoke profile |
 | `SESSION` | `120` (`30` in smoke) | Seconds each VU holds a session before reconnecting |
 | `CARDS_PER_USER` | `3` | Answer cards each user submits |
 | `VOTE_RATIO` | `0.55` | Fraction of users that also upvote |

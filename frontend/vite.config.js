@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Local dev: if 5173 is taken, fail loudly instead of silently hopping to
+    // another port (which breaks the fixed backend CORS/proxy assumptions).
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://localhost:8080",
