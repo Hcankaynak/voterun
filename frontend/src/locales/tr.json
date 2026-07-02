@@ -92,7 +92,10 @@
     "reconnecting": "Yeniden bağlanılıyor…",
     "share": "Panoyu paylaş",
     "copied": "Bağlantı kopyalandı!",
-    "connecting": "Panoya bağlanılıyor…"
+    "connecting": "Panoya bağlanılıyor…",
+    "stop": "Retroyu durdur",
+    "resume": "Retroyu sürdür",
+    "closedBanner": "Bu retro kapatıldı — artık salt okunur."
   },
   "column": {
     "addPlaceholder": "Kart ekle…",

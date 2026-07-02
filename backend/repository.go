@@ -9,6 +9,7 @@ type Repository interface {
 	CreateBoard(name, ownerID string) (*Board, error)
 	GetBoard(id string) (*Board, error)
 	ListBoardsByOwner(ownerID string) ([]Board, error)
+	SetBoardClosed(boardID, ownerID string, closed bool) (bool, error)
 	CreateCard(columnID, text, author string) (string, error)
 	UpdateCard(cardID, text string) (string, error)
 	DeleteCard(cardID string) (string, error)

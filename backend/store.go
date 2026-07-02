@@ -14,6 +14,9 @@ import (
 // ErrEmailTaken is returned when registering an email that already exists.
 var ErrEmailTaken = errors.New("email already registered")
 
+// ErrBoardClosed is returned when a mutation is attempted on a closed board.
+var ErrBoardClosed = errors.New("board is closed")
+
 // PostgresStore is the PostgreSQL-backed implementation of Repository.
 type PostgresStore struct {
 	db *sql.DB
@@ -83,6 +86,8 @@ CREATE TABLE IF NOT EXISTS votes (
 	PRIMARY KEY (card_id, voter_id)
 );
 
+ALTER TABLE boards ADD COLUMN IF NOT EXISTS closed BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE INDEX IF NOT EXISTS idx_columns_board ON columns(board_id);
 CREATE INDEX IF NOT EXISTS idx_cards_column ON cards(column_id);
 CREATE INDEX IF NOT EXISTS idx_votes_card ON votes(card_id);
@@ -142,8 +147,8 @@ func (s *PostgresStore) GetBoard(id string) (*Board, error) {
 	board := &Board{}
 	var ownerID sql.NullString
 	err := s.db.QueryRow(
-		"SELECT id, name, owner_id, created_at FROM boards WHERE id = $1", id,
-	).Scan(&board.ID, &board.Name, &ownerID, &board.CreatedAt)
+		"SELECT id, name, owner_id, closed, created_at FROM boards WHERE id = $1", id,
+	).Scan(&board.ID, &board.Name, &ownerID, &board.Closed, &board.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -233,35 +238,65 @@ WHERE col.board_id = $1`, id)
 	return board, nil
 }
 
-// boardIDForColumn returns the board a column belongs to.
-func (s *PostgresStore) boardIDForColumn(columnID string) (string, error) {
+// boardIDForColumn returns the board a column belongs to along with whether that
+// board is closed.
+func (s *PostgresStore) boardIDForColumn(columnID string) (string, bool, error) {
 	var boardID string
-	err := s.db.QueryRow("SELECT board_id FROM columns WHERE id = $1", columnID).Scan(&boardID)
+	var closed bool
+	err := s.db.QueryRow(`
+SELECT b.id, b.closed
+FROM columns col
+JOIN boards b ON b.id = col.board_id
+WHERE col.id = $1`, columnID).Scan(&boardID, &closed)
 	if err == sql.ErrNoRows {
-		return "", nil
+		return "", false, nil
 	}
-	return boardID, err
+	return boardID, closed, err
 }
 
-// boardIDForCard returns the board a card belongs to.
-func (s *PostgresStore) boardIDForCard(cardID string) (string, error) {
+// boardIDForCard returns the board a card belongs to along with whether that
+// board is closed.
+func (s *PostgresStore) boardIDForCard(cardID string) (string, bool, error) {
 	var boardID string
+	var closed bool
 	err := s.db.QueryRow(`
-SELECT col.board_id
+SELECT b.id, b.closed
 FROM cards c
 JOIN columns col ON col.id = c.column_id
-WHERE c.id = $1`, cardID).Scan(&boardID)
+JOIN boards b ON b.id = col.board_id
+WHERE c.id = $1`, cardID).Scan(&boardID, &closed)
 	if err == sql.ErrNoRows {
-		return "", nil
+		return "", false, nil
 	}
-	return boardID, err
+	return boardID, closed, err
+}
+
+// SetBoardClosed sets a board's closed flag, but only when ownerID owns the
+// board. It returns ok=false when the board does not exist or is owned by
+// someone else, so the caller can respond with a 403/404.
+func (s *PostgresStore) SetBoardClosed(boardID, ownerID string, closed bool) (bool, error) {
+	res, err := s.db.Exec(
+		"UPDATE boards SET closed = $1 WHERE id = $2 AND owner_id = $3",
+		closed, boardID, ownerID,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }
 
 // CreateCard adds a new card to a column and returns the owning board id.
 func (s *PostgresStore) CreateCard(columnID, text, author string) (string, error) {
-	boardID, err := s.boardIDForColumn(columnID)
+	boardID, closed, err := s.boardIDForColumn(columnID)
 	if err != nil || boardID == "" {
 		return "", err
+	}
+	if closed {
+		return boardID, ErrBoardClosed
 	}
 	if author == "" {
 		author = "Anonymous"
@@ -275,9 +310,12 @@ func (s *PostgresStore) CreateCard(columnID, text, author string) (string, error
 
 // UpdateCard edits a card's text and returns the owning board id.
 func (s *PostgresStore) UpdateCard(cardID, text string) (string, error) {
-	boardID, err := s.boardIDForCard(cardID)
+	boardID, closed, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
+	}
+	if closed {
+		return boardID, ErrBoardClosed
 	}
 	_, err = s.db.Exec("UPDATE cards SET text = $1 WHERE id = $2", text, cardID)
 	return boardID, err
@@ -285,9 +323,12 @@ func (s *PostgresStore) UpdateCard(cardID, text string) (string, error) {
 
 // DeleteCard removes a card and returns the owning board id.
 func (s *PostgresStore) DeleteCard(cardID string) (string, error) {
-	boardID, err := s.boardIDForCard(cardID)
+	boardID, closed, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
+	}
+	if closed {
+		return boardID, ErrBoardClosed
 	}
 	_, err = s.db.Exec("DELETE FROM cards WHERE id = $1", cardID)
 	return boardID, err
@@ -297,9 +338,12 @@ func (s *PostgresStore) DeleteCard(cardID string) (string, error) {
 // atomic: an INSERT ... ON CONFLICT DO NOTHING either records the vote or, if it
 // already existed (0 rows affected), the vote is removed with a DELETE.
 func (s *PostgresStore) ToggleVote(cardID, voterID string) (string, error) {
-	boardID, err := s.boardIDForCard(cardID)
+	boardID, closed, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
+	}
+	if closed {
+		return boardID, ErrBoardClosed
 	}
 
 	res, err := s.db.Exec(
@@ -328,7 +372,7 @@ func (s *PostgresStore) ToggleVote(cardID, voterID string) (string, error) {
 // The returned boards are summaries (no columns/cards loaded).
 func (s *PostgresStore) ListBoardsByOwner(ownerID string) ([]Board, error) {
 	rows, err := s.db.Query(
-		"SELECT id, name, owner_id, created_at FROM boards WHERE owner_id = $1 ORDER BY created_at DESC",
+		"SELECT id, name, owner_id, closed, created_at FROM boards WHERE owner_id = $1 ORDER BY created_at DESC",
 		ownerID,
 	)
 	if err != nil {
@@ -340,7 +384,7 @@ func (s *PostgresStore) ListBoardsByOwner(ownerID string) ([]Board, error) {
 	for rows.Next() {
 		var b Board
 		var owner sql.NullString
-		if err := rows.Scan(&b.ID, &b.Name, &owner, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &owner, &b.Closed, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		b.OwnerID = owner.String

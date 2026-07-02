@@ -98,6 +98,9 @@ Use this whenever you just want the server to run the latest code.
   ```
 5. **Recreate the containers** (Compose only restarts the ones whose image
   changed):
+  ```bash
+   docker compose up -d
+  ```
 6. **Verify the stack is healthy:**
   ```bash
    docker compose ps
