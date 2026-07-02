@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 const features = [
   {
-    title: "Real-time collaboration",
-    body: "Cards, edits, and votes sync instantly to everyone on the board over WebSockets.",
+    key: "realtime",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -23,8 +23,7 @@ const features = [
     ),
   },
   {
-    title: "Vote on what matters",
-    body: "Surface the team's top priorities—participants vote and the important items rise to the top.",
+    key: "voting",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -38,8 +37,7 @@ const features = [
     ),
   },
   {
-    title: "Share with a link",
-    body: "Create a board, send the link, and teammates join in seconds—no setup required.",
+    key: "share",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -53,8 +51,7 @@ const features = [
     ),
   },
   {
-    title: "Lightweight & self-hostable",
-    body: "A single Go binary with an embedded SQLite database. No external services to run.",
+    key: "selfhost",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect
@@ -86,28 +83,15 @@ const features = [
   },
 ];
 
-const steps = [
-  {
-    title: "Create a board",
-    body: "Name your retro and organize feedback into columns like What went well and Action items.",
-  },
-  {
-    title: "Share the link",
-    body: "Invite the team with a single link—everyone joins the same live board.",
-  },
-  {
-    title: "Vote in real time",
-    body: "Add cards, cast votes, and watch priorities emerge together, instantly.",
-  },
-];
+const steps = ["create", "share", "vote"];
 
-function BoardMockup() {
+function BoardMockup({ label }) {
   return (
     <svg
       className="hero-mock"
       viewBox="0 0 460 300"
       role="img"
-      aria-label="Preview of a VoteRun retrospective board with three columns of cards and votes"
+      aria-label={label}
     >
       <rect x="0" y="0" width="460" height="300" rx="14" fill="#ffffff" />
       <rect x="0" y="0" width="460" height="46" rx="14" fill="#f5f6f8" />
@@ -172,55 +156,53 @@ function BoardMockup() {
 }
 
 export default function Landing() {
+  const { t } = useTranslation();
+
   return (
     <div className="landing">
       <section className="landing-hero">
         <div className="hero-copy">
-          <span className="hero-eyebrow">Real-time retrospectives</span>
-          <h1>Run better retros, together.</h1>
-          <p className="hero-lead">
-            VoteRun is a real-time retrospective app for agile teams. Create a
-            board, collect feedback across columns, and vote on what matters—all
-            updating live on every participant's screen.
-          </p>
+          <span className="hero-eyebrow">{t("landing.eyebrow")}</span>
+          <h1>{t("landing.headline")}</h1>
+          <p className="hero-lead">{t("landing.lead")}</p>
           <div className="hero-actions">
             <Link
               to="/login"
               state={{ mode: "register" }}
               className="btn btn-primary"
             >
-              Get started
+              {t("landing.getStarted")}
             </Link>
             <Link to="/login" className="btn btn-outline">
-              Sign in
+              {t("landing.signIn")}
             </Link>
           </div>
-          <p className="hero-note">Free to use · Self-hostable · No credit card</p>
+          <p className="hero-note">{t("landing.heroNote")}</p>
         </div>
         <div className="hero-visual">
-          <BoardMockup />
+          <BoardMockup label={t("landing.mockAlt")} />
         </div>
       </section>
 
       <section className="landing-features">
         {features.map((f) => (
-          <div className="feature" key={f.title}>
+          <div className="feature" key={f.key}>
             <span className="feature-icon">{f.icon}</span>
-            <h3>{f.title}</h3>
-            <p>{f.body}</p>
+            <h3>{t(`landing.features.${f.key}.title`)}</h3>
+            <p>{t(`landing.features.${f.key}.body`)}</p>
           </div>
         ))}
       </section>
 
       <section className="landing-steps">
-        <h2>How it works</h2>
+        <h2>{t("landing.steps.heading")}</h2>
         <ol>
           {steps.map((s, i) => (
-            <li key={s.title}>
+            <li key={s}>
               <span className="step-num">{i + 1}</span>
               <div>
-                <h3>{s.title}</h3>
-                <p>{s.body}</p>
+                <h3>{t(`landing.steps.${s}.title`)}</h3>
+                <p>{t(`landing.steps.${s}.body`)}</p>
               </div>
             </li>
           ))}
@@ -228,10 +210,10 @@ export default function Landing() {
       </section>
 
       <section className="landing-cta">
-        <h2>Ready to run your next retro?</h2>
-        <p>Spin up a board in seconds and invite your team.</p>
+        <h2>{t("landing.cta.heading")}</h2>
+        <p>{t("landing.cta.body")}</p>
         <Link to="/login" state={{ mode: "register" }} className="btn btn-primary">
-          Get started free
+          {t("landing.cta.button")}
         </Link>
       </section>
     </div>

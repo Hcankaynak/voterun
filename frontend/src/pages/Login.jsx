@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth.jsx";
 
 export default function Login() {
+  const { t } = useTranslation();
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,7 +33,7 @@ export default function Login() {
       }
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      setError(err.message || t("login.error"));
       setBusy(false);
     }
   };
@@ -46,18 +48,18 @@ export default function Login() {
       <div className="auth-card">
         <div className="auth-logo">
           <div className="mark">V</div>
-          <h1>Vote Run App</h1>
+          <h1>{t("login.title")}</h1>
         </div>
         <p className="auth-sub">
           {isRegister
-            ? "Create an account to run your retrospectives."
-            : "Sign in to run your retrospectives."}
+            ? t("login.subtitleRegister")
+            : t("login.subtitleLogin")}
         </p>
 
         <form onSubmit={submit}>
           {isRegister && (
             <div className="field">
-              <label htmlFor="name">Name</label>
+              <label htmlFor="name">{t("login.nameLabel")}</label>
               <input
                 id="name"
                 className="input"
@@ -65,14 +67,14 @@ export default function Login() {
                 autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Optional"
+                placeholder={t("login.namePlaceholder")}
                 maxLength={60}
               />
             </div>
           )}
 
           <div className="field">
-            <label htmlFor="email">Email address</label>
+            <label htmlFor="email">{t("login.emailLabel")}</label>
             <input
               id="email"
               className="input"
@@ -85,7 +87,7 @@ export default function Login() {
           </div>
 
           <div className="field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t("login.passwordLabel")}</label>
             <input
               id="password"
               className="input"
@@ -101,23 +103,27 @@ export default function Login() {
           {error && <p className="error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-            {busy ? "Please wait…" : isRegister ? "Create account" : "Login"}
+            {busy
+              ? t("login.busy")
+              : isRegister
+              ? t("login.createAccount")
+              : t("login.login")}
           </button>
         </form>
 
         <p className="auth-switch">
           {isRegister ? (
             <>
-              Already have an account?{" "}
+              {t("login.haveAccount")}{" "}
               <button className="link" onClick={() => switchMode("login")}>
-                Sign in
+                {t("login.signIn")}
               </button>
             </>
           ) : (
             <>
-              New to VoteRun?{" "}
+              {t("login.newToVoteRun")}{" "}
               <button className="link" onClick={() => switchMode("register")}>
-                Create an account
+                {t("login.createOne")}
               </button>
             </>
           )}

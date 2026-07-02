@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "VoteRun · Real-time Retrospectives"
+  },
+  "nav": {
+    "tagline": "Real-time retrospectives",
+    "signIn": "Sign in",
+    "getStarted": "Get started",
+    "logout": "Logout"
+  },
+  "common": {
+    "loading": "Loading…"
+  },
+  "landing": {
+    "eyebrow": "Real-time retrospectives",
+    "headline": "Run better retros, together.",
+    "lead": "VoteRun is a real-time retrospective app for agile teams. Create a board, collect feedback across columns, and vote on what matters—all updating live on every participant's screen.",
+    "getStarted": "Get started",
+    "signIn": "Sign in",
+    "heroNote": "Free to use · Self-hostable · No credit card",
+    "mockAlt": "Preview of a VoteRun retrospective board with three columns of cards and votes",
+    "features": {
+      "realtime": {
+        "title": "Real-time collaboration",
+        "body": "Cards, edits, and votes sync instantly to everyone on the board over WebSockets."
+      },
+      "voting": {
+        "title": "Vote on what matters",
+        "body": "Surface the team's top priorities—participants vote and the important items rise to the top."
+      },
+      "share": {
+        "title": "Share with a link",
+        "body": "Create a board, send the link, and teammates join in seconds—no setup required."
+      },
+      "selfhost": {
+        "title": "Lightweight & self-hostable",
+        "body": "A single Go binary with an embedded SQLite database. No external services to run."
+      }
+    },
+    "steps": {
+      "heading": "How it works",
+      "create": {
+        "title": "Create a board",
+        "body": "Name your retro and organize feedback into columns like What went well and Action items."
+      },
+      "share": {
+        "title": "Share the link",
+        "body": "Invite the team with a single link—everyone joins the same live board."
+      },
+      "vote": {
+        "title": "Vote in real time",
+        "body": "Add cards, cast votes, and watch priorities emerge together, instantly."
+      }
+    },
+    "cta": {
+      "heading": "Ready to run your next retro?",
+      "body": "Spin up a board in seconds and invite your team.",
+      "button": "Get started free"
+    }
+  },
+  "login": {
+    "title": "Vote Run App",
+    "subtitleRegister": "Create an account to run your retrospectives.",
+    "subtitleLogin": "Sign in to run your retrospectives.",
+    "nameLabel": "Name",
+    "namePlaceholder": "Optional",
+    "emailLabel": "Email address",
+    "passwordLabel": "Password",
+    "busy": "Please wait…",
+    "createAccount": "Create account",
+    "login": "Login",
+    "haveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "newToVoteRun": "New to VoteRun?",
+    "createOne": "Create an account",
+    "error": "Something went wrong."
+  },
+  "home": {
+    "heading": "Run a better retro.",
+    "sub": "Spin up a board, share the link, and collect feedback in real time. Everyone votes on what matters most.",
+    "boardNamePlaceholder": "Board name (e.g. Sprint 42 Retro)",
+    "createBoard": "Create board",
+    "creating": "Creating…",
+    "createError": "Could not create board",
+    "yourBoards": "Your boards",
+    "empty": "You haven't created any boards yet. Create one above to get started."
+  },
+  "board": {
+    "votesCast_one": "{{count}} vote cast",
+    "votesCast_other": "{{count}} votes cast",
+    "live": "Live",
+    "reconnecting": "Reconnecting…",
+    "share": "Share board",
+    "copied": "Link copied!",
+    "connecting": "Connecting to board…"
+  },
+  "column": {
+    "addPlaceholder": "Add a card…",
+    "namePlaceholder": "Your name",
+    "add": "Add",
+    "defaults": {
+      "What went well": "What went well",
+      "What didn't go well": "What didn't go well",
+      "Action items": "Action items"
+    }
+  },
+  "card": {
+    "confirmDelete": "Delete this card?",
+    "delete": "Delete",
+    "removeVote": "Remove your vote",
+    "vote": "Vote for this card"
+  }
+}
