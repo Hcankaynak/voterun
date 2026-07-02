@@ -56,12 +56,35 @@ func (h *Hub) remove(c *client) {
 	}
 }
 
+// snapshotBytes marshals a board into the wire envelope used for both
+// broadcasts and per-client snapshots.
+func snapshotBytes(board *Board) ([]byte, error) {
+	return json.Marshal(wsMessage{Type: "board", Board: board})
+}
+
+// sendSnapshot enqueues the current board state to a single client (used on
+// connect) without fanning out to the whole room.
+func (h *Hub) sendSnapshot(c *client, board *Board) {
+	if board == nil {
+		return
+	}
+	payload, err := snapshotBytes(board)
+	if err != nil {
+		return
+	}
+	select {
+	case c.send <- payload:
+	default:
+		// Drop if the client's buffer is full to avoid blocking.
+	}
+}
+
 // Broadcast sends the latest board snapshot to everyone in the board's room.
 func (h *Hub) Broadcast(board *Board) {
 	if board == nil {
 		return
 	}
-	payload, err := json.Marshal(wsMessage{Type: "board", Board: board})
+	payload, err := snapshotBytes(board)
 	if err != nil {
 		return
 	}

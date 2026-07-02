@@ -36,7 +36,12 @@ func main() {
 	hub := NewHub()
 	server := NewServer(store, hub, []byte(jwtSecret))
 
-	r := gin.Default()
+	// Release mode + no per-request logger: under load the default Logger
+	// middleware formats and writes a line to stdout for every request, which
+	// adds CPU and lock contention. Keep only Recovery.
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(gin.Recovery())
 	corsConfig := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},

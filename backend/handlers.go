@@ -2,11 +2,19 @@ package main
 
 import (
 	"net/http"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// defaultBroadcastDelay is the trailing-edge debounce window used to coalesce
+// per-board broadcasts. Bursts of mutations within this window collapse into a
+// single board reload + fan-out instead of one per mutation.
+const defaultBroadcastDelay = 150 * time.Millisecond
 
 // Server wires the store and the realtime hub into HTTP handlers.
 type Server struct {
@@ -14,14 +22,22 @@ type Server struct {
 	hub       *Hub
 	jwtSecret []byte
 	upgrader  websocket.Upgrader
+
+	// Per-board broadcast coalescing: a board with a pending timer absorbs
+	// further mutations until the timer fires and flushes the latest state.
+	bmu            sync.Mutex
+	pending        map[string]*time.Timer
+	broadcastDelay time.Duration
 }
 
 // NewServer builds a Server with sensible WebSocket defaults.
 func NewServer(store Repository, hub *Hub, jwtSecret []byte) *Server {
 	return &Server{
-		store:     store,
-		hub:       hub,
-		jwtSecret: jwtSecret,
+		store:          store,
+		hub:            hub,
+		jwtSecret:      jwtSecret,
+		pending:        make(map[string]*time.Timer),
+		broadcastDelay: broadcastDelayFromEnv(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -30,6 +46,20 @@ func NewServer(store Repository, hub *Hub, jwtSecret []byte) *Server {
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	}
+}
+
+// broadcastDelayFromEnv reads BROADCAST_DEBOUNCE_MS, falling back to the
+// default. A value of 0 disables coalescing (flush immediately).
+func broadcastDelayFromEnv() time.Duration {
+	raw := os.Getenv("BROADCAST_DEBOUNCE_MS")
+	if raw == "" {
+		return defaultBroadcastDelay
+	}
+	ms, err := strconv.Atoi(raw)
+	if err != nil || ms < 0 {
+		return defaultBroadcastDelay
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // RegisterRoutes mounts all API and WebSocket routes onto the router.
@@ -116,7 +146,7 @@ func (s *Server) createCard(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "column not found"})
 		return
 	}
-	s.broadcastBoard(boardID)
+	s.scheduleBroadcast(boardID)
 	c.Status(http.StatusCreated)
 }
 
@@ -138,7 +168,7 @@ func (s *Server) updateCard(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 		return
 	}
-	s.broadcastBoard(boardID)
+	s.scheduleBroadcast(boardID)
 	c.Status(http.StatusOK)
 }
 
@@ -152,7 +182,7 @@ func (s *Server) deleteCard(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 		return
 	}
-	s.broadcastBoard(boardID)
+	s.scheduleBroadcast(boardID)
 	c.Status(http.StatusOK)
 }
 
@@ -174,12 +204,36 @@ func (s *Server) voteCard(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "card not found"})
 		return
 	}
-	s.broadcastBoard(boardID)
+	s.scheduleBroadcast(boardID)
 	c.Status(http.StatusOK)
 }
 
-// broadcastBoard reloads the board and pushes it to all connected clients.
-func (s *Server) broadcastBoard(boardID string) {
+// scheduleBroadcast coalesces board updates. The first mutation for a board
+// schedules a flush after broadcastDelay; further mutations within that window
+// are absorbed, so a burst produces a single reload + fan-out. When the delay is
+// zero, it flushes immediately.
+func (s *Server) scheduleBroadcast(boardID string) {
+	if s.broadcastDelay <= 0 {
+		s.flushBoard(boardID)
+		return
+	}
+
+	s.bmu.Lock()
+	defer s.bmu.Unlock()
+	if _, ok := s.pending[boardID]; ok {
+		// A flush is already queued; it will pick up the latest state.
+		return
+	}
+	s.pending[boardID] = time.AfterFunc(s.broadcastDelay, func() {
+		s.bmu.Lock()
+		delete(s.pending, boardID)
+		s.bmu.Unlock()
+		s.flushBoard(boardID)
+	})
+}
+
+// flushBoard reloads the board and pushes it to all connected clients.
+func (s *Server) flushBoard(boardID string) {
 	board, err := s.store.GetBoard(boardID)
 	if err != nil || board == nil {
 		return
@@ -203,6 +257,11 @@ func (s *Server) handleWS(c *gin.Context) {
 	cl := &client{conn: conn, boardID: boardID, send: make(chan []byte, 16)}
 	s.hub.add(cl)
 
+	// Send the current snapshot only to this client, reusing the board already
+	// loaded for the 404 check above. Avoids a second GetBoard and a full-room
+	// re-broadcast on every connect.
+	s.hub.sendSnapshot(cl, board)
+
 	go s.writePump(cl)
 	s.readPump(cl)
 }
@@ -225,11 +284,6 @@ func (s *Server) readPump(cl *client) {
 		cl.conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-
-	// Send the current board snapshot immediately on connect.
-	if board, err := s.store.GetBoard(cl.boardID); err == nil && board != nil {
-		s.hub.Broadcast(board)
-	}
 
 	for {
 		if _, _, err := cl.conn.ReadMessage(); err != nil {
