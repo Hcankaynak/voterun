@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voterun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voterun}
+      POSTGRES_DB: ${POSTGRES_DB:-voterun}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-voterun} -d ${POSTGRES_DB:-voterun}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build: ./backend
     image: ghcr.io/hcankaynak/voterun-backend:latest
@@ -6,12 +21,13 @@ services:
       # The frontend reaches the API through the nginx proxy (same origin),
       # so CORS is permissive here for direct API testing on the host.
       CORS_ORIGIN: "http://localhost:3000,http://localhost:5173"
-      DB_PATH: /data/voterun.db
+      DATABASE_URL: postgres://${POSTGRES_USER:-voterun}:${POSTGRES_PASSWORD:-voterun}@postgres:5432/${POSTGRES_DB:-voterun}?sslmode=disable
       # Local dev secret for signing JWTs. Use a real secret in production.
       JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
-    volumes:
-      # Named volume keeps the SQLite database across redeploys/restarts.
-      - voterun-data:/data
+    depends_on:
+      # Wait until Postgres passes its healthcheck before starting the backend.
+      postgres:
+        condition: service_healthy
     ports:
       # Exposed for direct API testing; the frontend talks to it internally.
       - "8081:8080"
@@ -27,4 +43,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  voterun-data:
+  postgres-data:

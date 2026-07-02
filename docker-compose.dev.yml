@@ -1,0 +1,46 @@
+# Development infrastructure only (no app code).
+#
+# Runs the backing services VoteRun needs locally, so you can run the actual
+# backend + frontend on your host via ./dev.sh (go run / vite) against them.
+#
+#   docker compose -f docker-compose.dev.yml up -d      # start infra
+#   ./dev.sh                                             # run app on host
+#   docker compose -f docker-compose.dev.yml down        # stop infra (keep data)
+#   docker compose -f docker-compose.dev.yml down -v     # stop + wipe data
+#
+# Ports are bound to 127.0.0.1 so nothing is exposed beyond your machine.
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voterun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voterun}
+      POSTGRES_DB: ${POSTGRES_DB:-voterun}
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-voterun} -d ${POSTGRES_DB:-voterun}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      # Host-run backend (./dev.sh, go run .) connects here.
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+
+  # Lightweight web UI for inspecting the database while developing.
+  # Open http://localhost:8082 and log in with the POSTGRES_* credentials
+  # (System: PostgreSQL, Server: postgres, User/DB: voterun).
+  adminer:
+    image: adminer:4.8.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:8082:8080"
+    restart: unless-stopped
+
+volumes:
+  postgres-dev-data:

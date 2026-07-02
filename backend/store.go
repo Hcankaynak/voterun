@@ -4,55 +4,62 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	_ "modernc.org/sqlite"
+	"github.com/jackc/pgx/v5/pgconn"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // ErrEmailTaken is returned when registering an email that already exists.
 var ErrEmailTaken = errors.New("email already registered")
 
-// Store wraps the SQLite database and exposes retro-board operations.
-type Store struct {
+// PostgresStore is the PostgreSQL-backed implementation of Repository.
+type PostgresStore struct {
 	db *sql.DB
 }
 
-// NewStore opens (or creates) the SQLite database at path and runs migrations.
-func NewStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+// Compile-time check that PostgresStore satisfies the Repository interface.
+var _ Repository = (*PostgresStore)(nil)
+
+// NewPostgresStore connects to PostgreSQL using the given DSN and runs migrations.
+func NewPostgresStore(dsn string) (*PostgresStore, error) {
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	// SQLite handles concurrency best with a single writer connection.
-	db.SetMaxOpenConns(1)
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	// Postgres handles concurrent connections well, so allow a real pool
+	// instead of the single-writer model SQLite required.
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(time.Hour)
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
-	s := &Store{db: db}
+	s := &PostgresStore{db: db}
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *Store) migrate() error {
+func (s *PostgresStore) migrate() error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS users (
 	id            TEXT PRIMARY KEY,
 	email         TEXT NOT NULL UNIQUE,
 	password_hash TEXT NOT NULL,
 	name          TEXT NOT NULL,
-	created_at    TIMESTAMP NOT NULL
+	created_at    TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS boards (
 	id         TEXT PRIMARY KEY,
 	name       TEXT NOT NULL,
 	owner_id   TEXT,
-	created_at TIMESTAMP NOT NULL
+	created_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS columns (
@@ -67,7 +74,7 @@ CREATE TABLE IF NOT EXISTS cards (
 	column_id  TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
 	text       TEXT NOT NULL,
 	author     TEXT NOT NULL,
-	created_at TIMESTAMP NOT NULL
+	created_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS votes (
@@ -79,63 +86,19 @@ CREATE TABLE IF NOT EXISTS votes (
 CREATE INDEX IF NOT EXISTS idx_columns_board ON columns(board_id);
 CREATE INDEX IF NOT EXISTS idx_cards_column ON cards(column_id);
 CREATE INDEX IF NOT EXISTS idx_votes_card ON votes(card_id);
+CREATE INDEX IF NOT EXISTS idx_boards_owner ON boards(owner_id);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-
-	// Backfill columns for databases created before these fields existed.
-	// This must happen before any index that references the new column.
-	if err := s.addColumnIfMissing("boards", "owner_id", "TEXT"); err != nil {
-		return fmt.Errorf("migrate boards.owner_id: %w", err)
-	}
-
-	if _, err := s.db.Exec(
-		"CREATE INDEX IF NOT EXISTS idx_boards_owner ON boards(owner_id)",
-	); err != nil {
-		return fmt.Errorf("migrate idx_boards_owner: %w", err)
-	}
 	return nil
-}
-
-// addColumnIfMissing adds a column to a table only if it isn't already present,
-// making schema changes safe to run against existing databases.
-func (s *Store) addColumnIfMissing(table, column, definition string) error {
-	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			cid        int
-			name       string
-			ctype      string
-			notNull    int
-			dfltValue  sql.NullString
-			primaryKey int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &primaryKey); err != nil {
-			return err
-		}
-		if name == column {
-			return nil // already exists
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	_, err = s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition))
-	return err
 }
 
 var defaultColumns = []string{"What went well", "What didn't go well", "Action items"}
 
 // CreateBoard inserts a new board (owned by ownerID) seeded with the default
 // retro columns.
-func (s *Store) CreateBoard(name, ownerID string) (*Board, error) {
+func (s *PostgresStore) CreateBoard(name, ownerID string) (*Board, error) {
 	if name == "" {
 		name = "Untitled Retro"
 	}
@@ -153,7 +116,7 @@ func (s *Store) CreateBoard(name, ownerID string) (*Board, error) {
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(
-		"INSERT INTO boards (id, name, owner_id, created_at) VALUES (?, ?, ?, ?)",
+		"INSERT INTO boards (id, name, owner_id, created_at) VALUES ($1, $2, $3, $4)",
 		board.ID, board.Name, board.OwnerID, board.CreatedAt,
 	); err != nil {
 		return nil, err
@@ -161,7 +124,7 @@ func (s *Store) CreateBoard(name, ownerID string) (*Board, error) {
 
 	for i, title := range defaultColumns {
 		if _, err := tx.Exec(
-			"INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+			"INSERT INTO columns (id, board_id, title, position) VALUES ($1, $2, $3, $4)",
 			uuid.NewString(), board.ID, title, i,
 		); err != nil {
 			return nil, err
@@ -175,11 +138,11 @@ func (s *Store) CreateBoard(name, ownerID string) (*Board, error) {
 }
 
 // GetBoard loads a board with its columns, cards, and vote tallies.
-func (s *Store) GetBoard(id string) (*Board, error) {
+func (s *PostgresStore) GetBoard(id string) (*Board, error) {
 	board := &Board{}
 	var ownerID sql.NullString
 	err := s.db.QueryRow(
-		"SELECT id, name, owner_id, created_at FROM boards WHERE id = ?", id,
+		"SELECT id, name, owner_id, created_at FROM boards WHERE id = $1", id,
 	).Scan(&board.ID, &board.Name, &ownerID, &board.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -190,7 +153,7 @@ func (s *Store) GetBoard(id string) (*Board, error) {
 	board.OwnerID = ownerID.String
 
 	colRows, err := s.db.Query(
-		"SELECT id, board_id, title, position FROM columns WHERE board_id = ? ORDER BY position",
+		"SELECT id, board_id, title, position FROM columns WHERE board_id = $1 ORDER BY position",
 		id,
 	)
 	if err != nil {
@@ -216,7 +179,7 @@ func (s *Store) GetBoard(id string) (*Board, error) {
 SELECT c.id, c.column_id, c.text, c.author, c.created_at
 FROM cards c
 JOIN columns col ON col.id = c.column_id
-WHERE col.board_id = ?
+WHERE col.board_id = $1
 ORDER BY c.created_at`, id)
 	if err != nil {
 		return nil, err
@@ -247,7 +210,7 @@ SELECT v.card_id, v.voter_id
 FROM votes v
 JOIN cards c ON c.id = v.card_id
 JOIN columns col ON col.id = c.column_id
-WHERE col.board_id = ?`, id)
+WHERE col.board_id = $1`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -271,9 +234,9 @@ WHERE col.board_id = ?`, id)
 }
 
 // boardIDForColumn returns the board a column belongs to.
-func (s *Store) boardIDForColumn(columnID string) (string, error) {
+func (s *PostgresStore) boardIDForColumn(columnID string) (string, error) {
 	var boardID string
-	err := s.db.QueryRow("SELECT board_id FROM columns WHERE id = ?", columnID).Scan(&boardID)
+	err := s.db.QueryRow("SELECT board_id FROM columns WHERE id = $1", columnID).Scan(&boardID)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -281,13 +244,13 @@ func (s *Store) boardIDForColumn(columnID string) (string, error) {
 }
 
 // boardIDForCard returns the board a card belongs to.
-func (s *Store) boardIDForCard(cardID string) (string, error) {
+func (s *PostgresStore) boardIDForCard(cardID string) (string, error) {
 	var boardID string
 	err := s.db.QueryRow(`
 SELECT col.board_id
 FROM cards c
 JOIN columns col ON col.id = c.column_id
-WHERE c.id = ?`, cardID).Scan(&boardID)
+WHERE c.id = $1`, cardID).Scan(&boardID)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
@@ -295,7 +258,7 @@ WHERE c.id = ?`, cardID).Scan(&boardID)
 }
 
 // CreateCard adds a new card to a column and returns the owning board id.
-func (s *Store) CreateCard(columnID, text, author string) (string, error) {
+func (s *PostgresStore) CreateCard(columnID, text, author string) (string, error) {
 	boardID, err := s.boardIDForColumn(columnID)
 	if err != nil || boardID == "" {
 		return "", err
@@ -304,61 +267,68 @@ func (s *Store) CreateCard(columnID, text, author string) (string, error) {
 		author = "Anonymous"
 	}
 	_, err = s.db.Exec(
-		"INSERT INTO cards (id, column_id, text, author, created_at) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO cards (id, column_id, text, author, created_at) VALUES ($1, $2, $3, $4, $5)",
 		uuid.NewString(), columnID, text, author, time.Now().UTC(),
 	)
 	return boardID, err
 }
 
 // UpdateCard edits a card's text and returns the owning board id.
-func (s *Store) UpdateCard(cardID, text string) (string, error) {
+func (s *PostgresStore) UpdateCard(cardID, text string) (string, error) {
 	boardID, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
 	}
-	_, err = s.db.Exec("UPDATE cards SET text = ? WHERE id = ?", text, cardID)
+	_, err = s.db.Exec("UPDATE cards SET text = $1 WHERE id = $2", text, cardID)
 	return boardID, err
 }
 
 // DeleteCard removes a card and returns the owning board id.
-func (s *Store) DeleteCard(cardID string) (string, error) {
+func (s *PostgresStore) DeleteCard(cardID string) (string, error) {
 	boardID, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
 	}
-	_, err = s.db.Exec("DELETE FROM cards WHERE id = ?", cardID)
+	_, err = s.db.Exec("DELETE FROM cards WHERE id = $1", cardID)
 	return boardID, err
 }
 
-// ToggleVote adds or removes a participant's vote on a card.
-func (s *Store) ToggleVote(cardID, voterID string) (string, error) {
+// ToggleVote adds or removes a participant's vote on a card. The toggle is
+// atomic: an INSERT ... ON CONFLICT DO NOTHING either records the vote or, if it
+// already existed (0 rows affected), the vote is removed with a DELETE.
+func (s *PostgresStore) ToggleVote(cardID, voterID string) (string, error) {
 	boardID, err := s.boardIDForCard(cardID)
 	if err != nil || boardID == "" {
 		return "", err
 	}
 
-	var exists int
-	err = s.db.QueryRow(
-		"SELECT COUNT(1) FROM votes WHERE card_id = ? AND voter_id = ?",
+	res, err := s.db.Exec(
+		"INSERT INTO votes (card_id, voter_id) VALUES ($1, $2) ON CONFLICT (card_id, voter_id) DO NOTHING",
 		cardID, voterID,
-	).Scan(&exists)
+	)
 	if err != nil {
 		return "", err
 	}
-
-	if exists > 0 {
-		_, err = s.db.Exec("DELETE FROM votes WHERE card_id = ? AND voter_id = ?", cardID, voterID)
-	} else {
-		_, err = s.db.Exec("INSERT INTO votes (card_id, voter_id) VALUES (?, ?)", cardID, voterID)
+	inserted, err := res.RowsAffected()
+	if err != nil {
+		return "", err
 	}
-	return boardID, err
+	if inserted == 0 {
+		// The vote already existed, so this toggle removes it.
+		if _, err := s.db.Exec(
+			"DELETE FROM votes WHERE card_id = $1 AND voter_id = $2", cardID, voterID,
+		); err != nil {
+			return "", err
+		}
+	}
+	return boardID, nil
 }
 
 // ListBoardsByOwner returns the boards owned by a user, newest first.
 // The returned boards are summaries (no columns/cards loaded).
-func (s *Store) ListBoardsByOwner(ownerID string) ([]Board, error) {
+func (s *PostgresStore) ListBoardsByOwner(ownerID string) ([]Board, error) {
 	rows, err := s.db.Query(
-		"SELECT id, name, owner_id, created_at FROM boards WHERE owner_id = ? ORDER BY created_at DESC",
+		"SELECT id, name, owner_id, created_at FROM boards WHERE owner_id = $1 ORDER BY created_at DESC",
 		ownerID,
 	)
 	if err != nil {
@@ -381,7 +351,7 @@ func (s *Store) ListBoardsByOwner(ownerID string) ([]Board, error) {
 
 // CreateUser inserts a new user. It returns ErrEmailTaken if the email is
 // already registered.
-func (s *Store) CreateUser(email, passwordHash, name string) (*User, error) {
+func (s *PostgresStore) CreateUser(email, passwordHash, name string) (*User, error) {
 	user := &User{
 		ID:        uuid.NewString(),
 		Email:     email,
@@ -389,11 +359,12 @@ func (s *Store) CreateUser(email, passwordHash, name string) (*User, error) {
 		CreatedAt: time.Now().UTC(),
 	}
 	_, err := s.db.Exec(
-		"INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO users (id, email, password_hash, name, created_at) VALUES ($1, $2, $3, $4, $5)",
 		user.ID, user.Email, passwordHash, user.Name, user.CreatedAt,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, ErrEmailTaken
 		}
 		return nil, err
@@ -403,11 +374,11 @@ func (s *Store) CreateUser(email, passwordHash, name string) (*User, error) {
 
 // GetUserByEmail returns the user and their stored password hash for login.
 // Returns (nil, "", nil) when no user matches.
-func (s *Store) GetUserByEmail(email string) (*User, string, error) {
+func (s *PostgresStore) GetUserByEmail(email string) (*User, string, error) {
 	user := &User{}
 	var hash string
 	err := s.db.QueryRow(
-		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = ?", email,
+		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = $1", email,
 	).Scan(&user.ID, &user.Email, &user.Name, &hash, &user.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
@@ -419,10 +390,10 @@ func (s *Store) GetUserByEmail(email string) (*User, string, error) {
 }
 
 // GetUserByID returns the user with the given id, or (nil, nil) if not found.
-func (s *Store) GetUserByID(id string) (*User, error) {
+func (s *PostgresStore) GetUserByID(id string) (*User, error) {
 	user := &User{}
 	err := s.db.QueryRow(
-		"SELECT id, email, name, created_at FROM users WHERE id = ?", id,
+		"SELECT id, email, name, created_at FROM users WHERE id = $1", id,
 	).Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -434,6 +405,6 @@ func (s *Store) GetUserByID(id string) (*User, error) {
 }
 
 // Close releases the underlying database handle.
-func (s *Store) Close() error {
+func (s *PostgresStore) Close() error {
 	return s.db.Close()
 }
