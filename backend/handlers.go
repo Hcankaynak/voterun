@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -78,6 +79,7 @@ func (s *Server) RegisterRoutes(r *gin.Engine) {
 		// Boards owned by the authenticated user.
 		api.GET("/boards", s.requireAuth, s.listMyBoards)
 		api.POST("/boards", s.requireAuth, s.createBoard)
+		api.PATCH("/boards/:id/status", s.requireAuth, s.setBoardStatus)
 
 		// Open endpoints: invited participants join a board via its link.
 		api.GET("/boards/:id", s.getBoard)
@@ -113,6 +115,28 @@ func (s *Server) createBoard(c *gin.Context) {
 	c.JSON(http.StatusCreated, board)
 }
 
+func (s *Server) setBoardStatus(c *gin.Context) {
+	var body struct {
+		Closed bool `json:"closed"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "closed is required"})
+		return
+	}
+
+	ok, err := s.store.SetBoardClosed(c.Param("id"), c.GetString("userID"), body.Closed)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "board not found or not owned by you"})
+		return
+	}
+	s.scheduleBroadcast(c.Param("id"))
+	c.Status(http.StatusOK)
+}
+
 func (s *Server) getBoard(c *gin.Context) {
 	board, err := s.store.GetBoard(c.Param("id"))
 	if err != nil {
@@ -138,6 +162,10 @@ func (s *Server) createCard(c *gin.Context) {
 	}
 
 	boardID, err := s.store.CreateCard(body.ColumnID, body.Text, body.Author)
+	if errors.Is(err, ErrBoardClosed) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "this retro is closed"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -160,6 +188,10 @@ func (s *Server) updateCard(c *gin.Context) {
 	}
 
 	boardID, err := s.store.UpdateCard(c.Param("id"), body.Text)
+	if errors.Is(err, ErrBoardClosed) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "this retro is closed"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -174,6 +206,10 @@ func (s *Server) updateCard(c *gin.Context) {
 
 func (s *Server) deleteCard(c *gin.Context) {
 	boardID, err := s.store.DeleteCard(c.Param("id"))
+	if errors.Is(err, ErrBoardClosed) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "this retro is closed"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -196,6 +232,10 @@ func (s *Server) voteCard(c *gin.Context) {
 	}
 
 	boardID, err := s.store.ToggleVote(c.Param("id"), body.VoterID)
+	if errors.Is(err, ErrBoardClosed) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "this retro is closed"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

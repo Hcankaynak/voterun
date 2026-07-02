@@ -92,7 +92,10 @@
     "reconnecting": "Reconnecting…",
     "share": "Share board",
     "copied": "Link copied!",
-    "connecting": "Connecting to board…"
+    "connecting": "Connecting to board…",
+    "stop": "Stop retro",
+    "resume": "Resume retro",
+    "closedBanner": "This retro is closed — it's now read-only."
   },
   "column": {
     "addPlaceholder": "Add a card…",

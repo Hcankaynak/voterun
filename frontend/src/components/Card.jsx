@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/api.js";
 
-export default function Card({ card, voterId }) {
+export default function Card({ card, voterId, closed }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(card.text);
@@ -37,7 +37,7 @@ export default function Card({ card, voterId }) {
 
   return (
     <article className="card">
-      {editing ? (
+      {editing && !closed ? (
         <textarea
           className="card-edit"
           value={draft}
@@ -57,7 +57,10 @@ export default function Card({ card, voterId }) {
           }}
         />
       ) : (
-        <p className="card-text" onClick={() => setEditing(true)}>
+        <p
+          className="card-text"
+          onClick={closed ? undefined : () => setEditing(true)}
+        >
           {card.text}
         </p>
       )}
@@ -65,13 +68,19 @@ export default function Card({ card, voterId }) {
       <footer className="card-foot">
         <span className="author">{card.author}</span>
         <div className="card-controls">
-          <button className="link-btn" onClick={remove} title={t("card.delete")}>
-            ✕
-          </button>
+          {!closed && (
+            <button
+              className="link-btn"
+              onClick={remove}
+              title={t("card.delete")}
+            >
+              ✕
+            </button>
+          )}
           <button
             className={`vote-btn ${hasVoted ? "voted" : ""}`}
             onClick={toggleVote}
-            disabled={busy}
+            disabled={busy || closed}
             title={hasVoted ? t("card.removeVote") : t("card.vote")}
           >
             ▲ {card.votes}

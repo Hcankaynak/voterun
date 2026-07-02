@@ -4,7 +4,7 @@ import { api } from "../lib/api.js";
 import { getName, setName as persistName } from "../lib/identity.js";
 import Card from "./Card.jsx";
 
-export default function Column({ boardId, column, voterId }) {
+export default function Column({ boardId, column, voterId, closed }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [author, setAuthor] = useState(getName());
@@ -38,10 +38,11 @@ export default function Column({ boardId, column, voterId }) {
 
       <div className="card-list">
         {sorted.map((card) => (
-          <Card key={card.id} card={card} voterId={voterId} />
+          <Card key={card.id} card={card} voterId={voterId} closed={closed} />
         ))}
       </div>
 
+      {!closed && (
       <form className="add-card" onSubmit={addCard}>
         <textarea
           placeholder={t("column.addPlaceholder")}
@@ -69,6 +70,7 @@ export default function Column({ boardId, column, voterId }) {
           </button>
         </div>
       </form>
+      )}
     </section>
   );
 }

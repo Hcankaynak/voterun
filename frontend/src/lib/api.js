@@ -64,6 +64,12 @@ export const api = {
 
   getBoard: (id) => request(`/boards/${id}`),
 
+  setBoardStatus: (boardId, closed) =>
+    request(`/boards/${boardId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ closed }),
+    }),
+
   createCard: (boardId, columnId, text, author) =>
     request(`/boards/${boardId}/cards`, {
       method: "POST",
