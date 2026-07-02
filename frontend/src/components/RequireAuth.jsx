@@ -1,9 +1,11 @@
 import { Navigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth.jsx";
 
 // Redirects unauthenticated visitors to the login page, remembering where
 // they were headed so they land back there after signing in.
 export default function RequireAuth({ children }) {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -12,7 +14,7 @@ export default function RequireAuth({ children }) {
     return (
       <div className="board-loading">
         <div className="spinner" />
-        <p>Loading…</p>
+        <p>{t("common.loading")}</p>
       </div>
     );
   }

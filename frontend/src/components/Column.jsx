@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../lib/api.js";
 import { getName, setName as persistName } from "../lib/identity.js";
 import Card from "./Card.jsx";
 
 export default function Column({ boardId, column, voterId }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [author, setAuthor] = useState(getName());
   const [adding, setAdding] = useState(false);
@@ -23,11 +25,14 @@ export default function Column({ boardId, column, voterId }) {
   };
 
   const sorted = [...column.cards].sort((a, b) => b.votes - a.votes);
+  const title = t(`column.defaults.${column.title}`, {
+    defaultValue: column.title,
+  });
 
   return (
     <section className="column">
       <header className="column-head">
-        <h3>{column.title}</h3>
+        <h3>{title}</h3>
         <span className="count">{column.cards.length}</span>
       </header>
 
@@ -39,7 +44,7 @@ export default function Column({ boardId, column, voterId }) {
 
       <form className="add-card" onSubmit={addCard}>
         <textarea
-          placeholder="Add a card…"
+          placeholder={t("column.addPlaceholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
@@ -50,7 +55,7 @@ export default function Column({ boardId, column, voterId }) {
         <div className="add-card-row">
           <input
             className="author-input"
-            placeholder="Your name"
+            placeholder={t("column.namePlaceholder")}
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
             maxLength={40}
@@ -60,7 +65,7 @@ export default function Column({ boardId, column, voterId }) {
             className="btn btn-primary"
             disabled={adding || !text.trim()}
           >
-            Add
+            {t("column.add")}
           </button>
         </div>
       </form>

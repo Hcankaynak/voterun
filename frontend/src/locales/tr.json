@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "VoteRun · Gerçek Zamanlı Retrospektifler"
+  },
+  "nav": {
+    "tagline": "Gerçek zamanlı retrospektifler",
+    "signIn": "Giriş yap",
+    "getStarted": "Başla",
+    "logout": "Çıkış yap"
+  },
+  "common": {
+    "loading": "Yükleniyor…"
+  },
+  "landing": {
+    "eyebrow": "Gerçek zamanlı retrospektifler",
+    "headline": "Birlikte daha iyi retrolar yapın.",
+    "lead": "VoteRun, çevik ekipler için gerçek zamanlı bir retrospektif uygulamasıdır. Bir pano oluşturun, sütunlar halinde geri bildirim toplayın ve önemli olana oy verin—her şey tüm katılımcıların ekranında canlı olarak güncellenir.",
+    "getStarted": "Başla",
+    "signIn": "Giriş yap",
+    "heroNote": "Ücretsiz · Kendi sunucunuzda barındırılabilir · Kredi kartı gerekmez",
+    "mockAlt": "Kartlar ve oylardan oluşan üç sütunlu bir VoteRun retrospektif panosunun önizlemesi",
+    "features": {
+      "realtime": {
+        "title": "Gerçek zamanlı işbirliği",
+        "body": "Kartlar, düzenlemeler ve oylar WebSocket üzerinden panodaki herkese anında senkronize olur."
+      },
+      "voting": {
+        "title": "Önemli olana oy verin",
+        "body": "Ekibin en önemli önceliklerini öne çıkarın—katılımcılar oy verir ve önemli maddeler en üste çıkar."
+      },
+      "share": {
+        "title": "Bağlantıyla paylaşın",
+        "body": "Bir pano oluşturun, bağlantıyı gönderin, ekip arkadaşlarınız saniyeler içinde katılsın—kurulum gerektirmez."
+      },
+      "selfhost": {
+        "title": "Hafif ve kendi sunucunuzda barındırılabilir",
+        "body": "Gömülü SQLite veritabanına sahip tek bir Go ikili dosyası. Çalıştırılacak harici bir servis yok."
+      }
+    },
+    "steps": {
+      "heading": "Nasıl çalışır",
+      "create": {
+        "title": "Bir pano oluşturun",
+        "body": "Retronuza bir ad verin ve geri bildirimleri İyi gidenler ve Aksiyon maddeleri gibi sütunlarda düzenleyin."
+      },
+      "share": {
+        "title": "Bağlantıyı paylaşın",
+        "body": "Ekibi tek bir bağlantıyla davet edin—herkes aynı canlı panoya katılır."
+      },
+      "vote": {
+        "title": "Gerçek zamanlı oy verin",
+        "body": "Kart ekleyin, oy verin ve önceliklerin birlikte, anında ortaya çıkışını izleyin."
+      }
+    },
+    "cta": {
+      "heading": "Bir sonraki retronuza hazır mısınız?",
+      "body": "Saniyeler içinde bir pano oluşturun ve ekibinizi davet edin.",
+      "button": "Ücretsiz başla"
+    }
+  },
+  "login": {
+    "title": "Vote Run Uygulaması",
+    "subtitleRegister": "Retrospektiflerinizi yürütmek için bir hesap oluşturun.",
+    "subtitleLogin": "Retrospektiflerinizi yürütmek için giriş yapın.",
+    "nameLabel": "Ad",
+    "namePlaceholder": "İsteğe bağlı",
+    "emailLabel": "E-posta adresi",
+    "passwordLabel": "Parola",
+    "busy": "Lütfen bekleyin…",
+    "createAccount": "Hesap oluştur",
+    "login": "Giriş yap",
+    "haveAccount": "Zaten bir hesabınız var mı?",
+    "signIn": "Giriş yap",
+    "newToVoteRun": "VoteRun'da yeni misiniz?",
+    "createOne": "Hesap oluşturun",
+    "error": "Bir şeyler ters gitti."
+  },
+  "home": {
+    "heading": "Daha iyi bir retro yapın.",
+    "sub": "Bir pano oluşturun, bağlantıyı paylaşın ve geri bildirimleri gerçek zamanlı toplayın. Herkes en önemli olana oy verir.",
+    "boardNamePlaceholder": "Pano adı (örn. Sprint 42 Retro)",
+    "createBoard": "Pano oluştur",
+    "creating": "Oluşturuluyor…",
+    "createError": "Pano oluşturulamadı",
+    "yourBoards": "Panolarınız",
+    "empty": "Henüz hiç pano oluşturmadınız. Başlamak için yukarıdan bir tane oluşturun."
+  },
+  "board": {
+    "votesCast_one": "{{count}} oy verildi",
+    "votesCast_other": "{{count}} oy verildi",
+    "live": "Canlı",
+    "reconnecting": "Yeniden bağlanılıyor…",
+    "share": "Panoyu paylaş",
+    "copied": "Bağlantı kopyalandı!",
+    "connecting": "Panoya bağlanılıyor…"
+  },
+  "column": {
+    "addPlaceholder": "Kart ekle…",
+    "namePlaceholder": "Adınız",
+    "add": "Ekle",
+    "defaults": {
+      "What went well": "İyi gidenler",
+      "What didn't go well": "Kötü gidenler",
+      "Action items": "Aksiyon maddeleri"
+    }
+  },
+  "card": {
+    "confirmDelete": "Bu kart silinsin mi?",
+    "delete": "Sil",
+    "removeVote": "Oyunuzu geri çekin",
+    "vote": "Bu karta oy verin"
+  }
+}

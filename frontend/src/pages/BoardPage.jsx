@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useBoardSocket } from "../lib/useBoardSocket.js";
 import { getVoterId } from "../lib/identity.js";
 import Column from "../components/Column.jsx";
 
 export default function BoardPage() {
+  const { t } = useTranslation();
   const { id } = useParams();
   const { board, connected } = useBoardSocket(id);
   const [copied, setCopied] = useState(false);
@@ -20,7 +22,7 @@ export default function BoardPage() {
     return (
       <div className="board-loading">
         <div className="spinner" />
-        <p>Connecting to board…</p>
+        <p>{t("board.connecting")}</p>
       </div>
     );
   }
@@ -36,16 +38,16 @@ export default function BoardPage() {
         <div>
           <h2 className="board-title">{board.name}</h2>
           <p className="board-meta">
-            {totalVotes} vote{totalVotes === 1 ? "" : "s"} cast
+            {t("board.votesCast", { count: totalVotes })}
           </p>
         </div>
         <div className="board-actions">
           <span className={`status ${connected ? "online" : "offline"}`}>
             <span className="dot" />
-            {connected ? "Live" : "Reconnecting…"}
+            {connected ? t("board.live") : t("board.reconnecting")}
           </span>
           <button className="btn btn-light" onClick={copyLink}>
-            {copied ? "Link copied!" : "Share board"}
+            {copied ? t("board.copied") : t("board.share")}
           </button>
         </div>
       </div>

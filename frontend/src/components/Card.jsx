@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../lib/api.js";
 
 export default function Card({ card, voterId }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(card.text);
   const [busy, setBusy] = useState(false);
@@ -29,7 +31,7 @@ export default function Card({ card, voterId }) {
   };
 
   const remove = async () => {
-    if (!confirm("Delete this card?")) return;
+    if (!confirm(t("card.confirmDelete"))) return;
     await api.deleteCard(card.id);
   };
 
@@ -63,14 +65,14 @@ export default function Card({ card, voterId }) {
       <footer className="card-foot">
         <span className="author">{card.author}</span>
         <div className="card-controls">
-          <button className="link-btn" onClick={remove} title="Delete">
+          <button className="link-btn" onClick={remove} title={t("card.delete")}>
             ✕
           </button>
           <button
             className={`vote-btn ${hasVoted ? "voted" : ""}`}
             onClick={toggleVote}
             disabled={busy}
-            title={hasVoted ? "Remove your vote" : "Vote for this card"}
+            title={hasVoted ? t("card.removeVote") : t("card.vote")}
           >
             ▲ {card.votes}
           </button>
