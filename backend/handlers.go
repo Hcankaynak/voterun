@@ -10,14 +10,14 @@ import (
 
 // Server wires the store and the realtime hub into HTTP handlers.
 type Server struct {
-	store     *Store
+	store     Repository
 	hub       *Hub
 	jwtSecret []byte
 	upgrader  websocket.Upgrader
 }
 
 // NewServer builds a Server with sensible WebSocket defaults.
-func NewServer(store *Store, hub *Hub, jwtSecret []byte) *Server {
+func NewServer(store Repository, hub *Hub, jwtSecret []byte) *Server {
 	return &Server{
 		store:     store,
 		hub:       hub,

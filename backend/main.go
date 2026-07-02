@@ -19,7 +19,7 @@ func env(key, fallback string) string {
 
 func main() {
 	port := env("PORT", "8080")
-	dbPath := env("DB_PATH", "voterun.db")
+	databaseURL := env("DATABASE_URL", "postgres://voterun:voterun@localhost:5432/voterun?sslmode=disable")
 	corsOrigin := env("CORS_ORIGIN", "http://localhost:5173")
 	jwtSecret := env("JWT_SECRET", "dev-insecure-secret-change-me")
 
@@ -27,7 +27,7 @@ func main() {
 		log.Println("WARNING: using the default JWT_SECRET; set JWT_SECRET in production")
 	}
 
-	store, err := NewStore(dbPath)
+	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
@@ -37,12 +37,20 @@ func main() {
 	server := NewServer(store, hub, []byte(jwtSecret))
 
 	r := gin.Default()
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     strings.Split(corsOrigin, ","),
+	corsConfig := cors.Config{
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
-	}))
+	}
+	if strings.TrimSpace(corsOrigin) == "*" {
+		// Dev convenience: reflect any origin (Vite may pick any free port).
+		// This reflects the request's Origin rather than sending a literal "*",
+		// so it still works with AllowCredentials. Do NOT use "*" in production.
+		corsConfig.AllowOriginFunc = func(origin string) bool { return true }
+	} else {
+		corsConfig.AllowOrigins = strings.Split(corsOrigin, ",")
+	}
+	r.Use(cors.New(corsConfig))
 	r.Use(metricsMiddleware())
 
 	// Prometheus scrape endpoint. Kept internal: Prometheus reaches it over the
@@ -51,7 +59,7 @@ func main() {
 
 	server.RegisterRoutes(r)
 
-	log.Printf("VoteRun backend listening on :%s (db=%s)", port, dbPath)
+	log.Printf("VoteRun backend listening on :%s (postgres)", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
